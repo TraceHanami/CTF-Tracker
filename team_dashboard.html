@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Team Event Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0d1a;
+      --surface: #111629;
+      --surface2: #1a2040;
+      --border: #252d4a;
+      --accent: #6c63ff;
+      --accent2: #00d4aa;
+      --active: #00d4aa;
+      --text: #e8ecf5;
+      --muted: #7b8ab8;
+      --tag-bg: #1e2848;
+      --tag-text: #9daee8;
+      --danger: #ff4e6a;
+      --warn: #ffb84d;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px 60px;
+    }
+
+    /* ── Header ── */
+    .header {
+      max-width: 960px;
+      margin: 0 auto 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .header-left h1 {
+      font-size: 1.75rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #6c63ff, #00d4aa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.5px;
+    }
+    .header-left p {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ── Stats Bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .stat-chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 20px;
+      text-align: center;
+      min-width: 110px;
+    }
+    .stat-chip .val {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent2);
+    }
+    .stat-chip .lbl {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-top: 2px;
+    }
+    .stat-chip.accent .val { color: var(--accent); }
+
+    /* ── Grid ── */
+    .grid {
+      max-width: 960px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 18px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      position: relative;
+      transition: transform 0.25s, box-shadow 0.25s, border-color 0.3s;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(108,99,255,0.06), transparent 60%);
+      pointer-events: none;
+    }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
+    .card.participating {
+      border-color: var(--active);
+      box-shadow: 0 0 0 1px var(--active), 0 8px 32px rgba(0,212,170,0.15);
+    }
+    .card.participating::before {
+      background: linear-gradient(135deg, rgba(0,212,170,0.08), transparent 60%);
+    }
+
+    /* participating ribbon */
+    .ribbon {
+      position: absolute;
+      top: 14px; right: -28px;
+      background: var(--active);
+      color: #0a0d1a;
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding: 3px 36px;
+      transform: rotate(35deg);
+      text-transform: uppercase;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .card.participating .ribbon { opacity: 1; }
+
+    /* Card header row */
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    /* Checkbox */
+    .check-wrap { display: flex; align-items: center; padding-top: 2px; }
+    .check-wrap input[type=checkbox] { display: none; }
+    .check-wrap label {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      flex-shrink: 0;
+    }
+    .check-wrap input:checked + label {
+      border-color: var(--active);
+      background: var(--active);
+    }
+    .check-wrap label::after {
+      content: '';
+      width: 5px; height: 9px;
+      border: 2px solid #0a0d1a;
+      border-top: none; border-left: none;
+      transform: rotate(45deg) translate(-1px, -1px);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .check-wrap input:checked + label::after { opacity: 1; }
+
+    /* Team info */
+    .team-info { flex: 1; min-width: 0; }
+    .team-name {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 0.5px;
+    }
+    .team-lead {
+      font-size: 0.76rem;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+    .team-lead span {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* Members section */
+    .members-section { margin-top: 12px; }
+    .members-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Tags */
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag {
+      background: var(--tag-bg);
+      color: var(--tag-text);
+      font-size: 0.72rem;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      transition: background 0.2s;
+    }
+    .card.participating .tag {
+      background: rgba(0,212,170,0.1);
+      border-color: rgba(0,212,170,0.3);
+      color: #6fffd8;
+    }
+
+    /* Edit button */
+    .btn-edit {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 20px;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+    }
+    .btn-edit:hover { border-color: var(--accent); color: var(--accent); background: rgba(108,99,255,0.1); }
+
+    /* Edit Mode */
+    .edit-panel { display: none; flex-direction: column; gap: 10px; margin-top: 8px; }
+    .edit-panel.open { display: flex; }
+
+    /* Custom Multi-Select Dropdown */
+    .dropdown-wrap { position: relative; }
+    .dropdown-trigger {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-size: 0.78rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: border-color 0.2s;
+      user-select: none;
+    }
+    .dropdown-trigger:hover, .dropdown-trigger.open { border-color: var(--accent); }
+    .dropdown-trigger .arrow {
+      font-size: 0.6rem;
+      color: var(--muted);
+      transition: transform 0.2s;
+    }
+    .dropdown-trigger.open .arrow { transform: rotate(180deg); }
+
+    .dropdown-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0; right: 0;
+      background: var(--surface2);
+      border: 1px solid var(--accent);
+      border-radius: 10px;
+      padding: 6px;
+      z-index: 100;
+      max-height: 220px;
+      overflow-y: auto;
+      display: none;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+    }
+    .dropdown-menu.open { display: block; }
+    .dropdown-menu::-webkit-scrollbar { width: 4px; }
+    .dropdown-menu::-webkit-scrollbar-track { background: transparent; }
+    .dropdown-menu::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .dropdown-search {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 6px 10px;
+      color: var(--text);
+      font-size: 0.76rem;
+      margin-bottom: 6px;
+      outline: none;
+    }
+    .dropdown-search:focus { border-color: var(--accent); }
+
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 0.77rem;
+      color: var(--muted);
+      transition: background 0.15s, color 0.15s;
+    }
+    .dropdown-item:hover { background: rgba(108,99,255,0.12); color: var(--text); }
+    .dropdown-item.selected { background: rgba(0,212,170,0.12); color: var(--active); }
+    .dropdown-item .item-check {
+      width: 14px; height: 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-size: 0.6rem;
+    }
+    .dropdown-item.selected .item-check {
+      background: var(--active);
+      border-color: var(--active);
+      color: #0a0d1a;
+    }
+
+    /* Selected preview tags in edit mode */
+    .selected-preview {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      min-height: 24px;
+    }
+    .sel-tag {
+      background: rgba(108,99,255,0.15);
+      border: 1px solid rgba(108,99,255,0.4);
+      color: #b0a8ff;
+      font-size: 0.7rem;
+      font-weight: 500;
+      padding: 3px 8px;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .sel-tag .rm {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.75rem;
+      line-height: 1;
+      transition: color 0.15s;
+    }
+    .sel-tag .rm:hover { color: var(--danger); }
+
+    /* Action buttons */
+    .edit-actions { display: flex; gap: 8px; }
+    .btn-save {
+      flex: 1;
+      background: linear-gradient(135deg, var(--accent), #8b85ff);
+      border: none;
+      color: #fff;
+      font-size: 0.76rem;
+      font-weight: 600;
+      padding: 8px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+    }
+    .btn-save:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-cancel {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.76rem;
+      padding: 8px 14px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-cancel:hover { border-color: var(--danger); color: var(--danger); }
+
+    /* No members empty state */
+    .no-members {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    /* Pulse animation for active card */
+    @keyframes pulse-border {
+      0%,100% { box-shadow: 0 0 0 1px var(--active), 0 8px 32px rgba(0,212,170,0.1); }
+      50% { box-shadow: 0 0 0 1px var(--active), 0 8px 32px rgba(0,212,170,0.25); }
+    }
+    .card.participating { animation: pulse-border 2.5s ease-in-out infinite; }
+
+    /* Tooltip on team name */
+    [title] { cursor: default; }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+      .header { flex-direction: column; align-items: flex-start; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <h1>⚡ Team Event Dashboard</h1>
+    <p>Manage team participation &amp; rosters for the event</p>
+  </div>
+  <div class="stats-bar">
+    <div class="stat-chip">
+      <div class="val" id="stat-participating">0</div>
+      <div class="lbl">Participating</div>
+    </div>
+    <div class="stat-chip accent">
+      <div class="val" id="stat-total">6</div>
+      <div class="lbl">Total Teams</div>
+    </div>
+  </div>
+</div>
+
+<!-- Cards Grid -->
+<div class="grid" id="grid"></div>
+
+<script>
+const POOL = [
+  "Liyandar Rishwanth .L","Kowshik. T","Vishal .R","Rithish .S .G",
+  "Keerthi Raghavan .K","Santhosh Kumar. S","Abhinesh John .V","Nirmal Raj .D",
+  "Harish Kumar. N","Kadhiravan. E. G","Vaishnavan .S","Harish Kumar .V .S",
+  "Christ Michael Jeniston. S","Mantraa .K","Sree Murugan .N .M","Pranesh .C",
+  "Jeevaranjan. V","Karan .R .J","Asuwath Kumaresh .V","Mihaash Dharan. M",
+  "Jesvin Bruce. J","Harish. M","Dharshini .T .R","Jashwanth .M .U"
+];
+
+let teams = [
+  {id:0, team:"Y0U4_N@m3", lead:"Liyandar Rishwanth .L", members:["Kowshik. T","Vishal .R","Rithish .S .G"], participating:false},
+  {id:1, team:"Hatsune_miku", lead:"Keerthi Raghavan .K", members:["Santhosh Kumar. S","Abhinesh John .V","Nirmal Raj .D"], participating:false},
+  {id:2, team:"Silent Voice", lead:"Harish Kumar. N", members:["Kadhiravan. E. G","Vaishnavan .S","Harish Kumar .V .S"], participating:false},
+  {id:3, team:"5TR4W_H475", lead:"Christ Michael Jeniston. S", members:["Mantraa .K","Sree Murugan .N .M","Pranesh .C"], participating:false},
+  {id:4, team:"Z3R3F", lead:"Jeevaranjan. V", members:["Karan .R .J","Asuwath Kumaresh .V","Mihaash Dharan. M"], participating:false},
+  {id:5, team:"s0ul s0c13ty", lead:"Jesvin Bruce. J", members:["Harish. M","Dharshini .T .R","Jashwanth .M .U"], participating:false}
+];
+
+// Draft state for edit mode
+let drafts = {}; // {id: [...members]}
+let editOpen = {}; // {id: bool}
+let dropOpen = {}; // {id: bool}
+
+function updateStats() {
+  const count = teams.filter(t => t.participating).length;
+  document.getElementById('stat-participating').textContent = count;
+  document.getElementById('stat-total').textContent = teams.length;
+}
+
+function renderTags(members, teamId) {
+  if (!members.length) return `<span class="no-members">No members assigned</span>`;
+  return `<div class="tags">${members.map(m => `<span class="tag">${m}</span>`).join('')}</div>`;
+}
+
+function renderSelTags(draft, teamId) {
+  if (!draft.length) return `<span class="no-members" style="font-size:0.72rem">None selected</span>`;
+  return draft.map(m =>
+    `<span class="sel-tag">${m}<span class="rm" onclick="removeDraftMember(${teamId},'${CSS.escape ? m.replace(/'/g,"\\'") : m}')">✕</span></span>`
+  ).join('');
+}
+
+function renderDropdownItems(teamId) {
+  const draft = drafts[teamId] || [];
+  const search = (document.getElementById(`search-${teamId}`)?.value || '').toLowerCase();
+  return POOL
+    .filter(p => !search || p.toLowerCase().includes(search))
+    .map(p => {
+      const sel = draft.includes(p);
+      return `<div class="dropdown-item ${sel?'selected':''}" onclick="toggleMember(${teamId},'${p.replace(/'/g,"\\'")}')">
+        <span class="item-check">${sel?'✓':''}</span>${p}
+      </div>`;
+    }).join('');
+}
+
+function buildCard(t) {
+  const editing = editOpen[t.id];
+  const draft = drafts[t.id] || [...t.members];
+  const dOpen = dropOpen[t.id];
+
+  return `
+  <div class="card ${t.participating?'participating':''}" id="card-${t.id}">
+    <div class="ribbon">ACTIVE</div>
+    <div class="card-header">
+      <div class="check-wrap">
+        <input type="checkbox" id="chk-${t.id}" ${t.participating?'checked':''} onchange="toggleParticipating(${t.id})"/>
+        <label for="chk-${t.id}"></label>
+      </div>
+      <div class="team-info">
+        <div class="team-name" title="${t.team}">${t.team}</div>
+        <div class="team-lead">Lead: <span>${t.lead}</span></div>
+      </div>
+    </div>
+
+    <div class="members-section">
+      <div class="members-label">
+        <span>Members (${editing ? (drafts[t.id]||t.members).length : t.members.length})</span>
+        ${!editing
+          ? `<button class="btn-edit" onclick="openEdit(${t.id})">✏ Edit</button>`
+          : ''}
+      </div>
+
+      ${!editing
+        ? renderTags(t.members, t.id)
+        : `<div class="edit-panel open">
+            <div class="selected-preview" id="preview-${t.id}">${renderSelTags(draft, t.id)}</div>
+            <div class="dropdown-wrap">
+              <div class="dropdown-trigger ${dOpen?'open':''}" id="trigger-${t.id}" onclick="toggleDrop(${t.id})">
+                <span style="color:var(--muted);font-size:0.76rem">Select members from pool…</span>
+                <span class="arrow">▼</span>
+              </div>
+              <div class="dropdown-menu ${dOpen?'open':''}" id="menu-${t.id}">
+                <input class="dropdown-search" id="search-${t.id}" type="text" placeholder="Search..." oninput="refreshItems(${t.id})"/>
+                <div id="items-${t.id}">${renderDropdownItems(t.id)}</div>
+              </div>
+            </div>
+            <div class="edit-actions">
+              <button class="btn-save" onclick="saveEdit(${t.id})">✓ Save</button>
+              <button class="btn-cancel" onclick="cancelEdit(${t.id})">✕ Cancel</button>
+            </div>
+          </div>`
+      }
+    </div>
+  </div>`;
+}
+
+function render() {
+  document.getElementById('grid').innerHTML = teams.map(buildCard).join('');
+  updateStats();
+}
+
+function toggleParticipating(id) {
+  teams[id].participating = !teams[id].participating;
+  const card = document.getElementById(`card-${id}`);
+  if (teams[id].participating) card.classList.add('participating');
+  else card.classList.remove('participating');
+  updateStats();
+  // animate
+  card.style.transition = 'transform 0.15s';
+  card.style.transform = 'scale(1.02)';
+  setTimeout(() => { card.style.transform = ''; }, 200);
+}
+
+function openEdit(id) {
+  editOpen[id] = true;
+  drafts[id] = [...teams[id].members];
+  dropOpen[id] = false;
+  reRenderCard(id);
+}
+
+function cancelEdit(id) {
+  editOpen[id] = false;
+  delete drafts[id];
+  dropOpen[id] = false;
+  reRenderCard(id);
+}
+
+function saveEdit(id) {
+  teams[id].members = [...(drafts[id] || [])];
+  editOpen[id] = false;
+  delete drafts[id];
+  dropOpen[id] = false;
+  reRenderCard(id);
+}
+
+function toggleDrop(id) {
+  dropOpen[id] = !dropOpen[id];
+  const trigger = document.getElementById(`trigger-${id}`);
+  const menu = document.getElementById(`menu-${id}`);
+  if (trigger) trigger.classList.toggle('open', dropOpen[id]);
+  if (menu) menu.classList.toggle('open', dropOpen[id]);
+  if (dropOpen[id]) setTimeout(() => document.getElementById(`search-${id}`)?.focus(), 50);
+}
+
+function toggleMember(id, name) {
+  if (!drafts[id]) drafts[id] = [...teams[id].members];
+  const idx = drafts[id].indexOf(name);
+  if (idx === -1) drafts[id].push(name);
+  else drafts[id].splice(idx, 1);
+  // update preview
+  const preview = document.getElementById(`preview-${id}`);
+  if (preview) preview.innerHTML = renderSelTags(drafts[id], id);
+  // update items
+  refreshItems(id);
+  // update label count
+  const label = document.querySelector(`#card-${id} .members-label span`);
+  if (label) label.textContent = `Members (${drafts[id].length})`;
+}
+
+function removeDraftMember(id, name) {
+  toggleMember(id, name);
+}
+
+function refreshItems(id) {
+  const el = document.getElementById(`items-${id}`);
+  if (el) el.innerHTML = renderDropdownItems(id);
+}
+
+function reRenderCard(id) {
+  const card = document.getElementById(`card-${id}`);
+  if (!card) { render(); return; }
+  const tmp = document.createElement('div');
+  tmp.innerHTML = buildCard(teams[id]);
+  const newCard = tmp.firstElementChild;
+  card.replaceWith(newCard);
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', e => {
+  teams.forEach(t => {
+    if (dropOpen[t.id]) {
+      const menu = document.getElementById(`menu-${t.id}`);
+      const trigger = document.getElementById(`trigger-${t.id}`);
+      if (menu && !menu.contains(e.target) && trigger && !trigger.contains(e.target)) {
+        dropOpen[t.id] = false;
+        trigger.classList.remove('open');
+        menu.classList.remove('open');
+      }
+    }
+  });
+});
+
+render();
+</script>
+</body>
+</html>
