@@ -517,10 +517,14 @@
         <td class="px-4 py-3" onclick="event.stopPropagation()">
           <div style="display:flex;align-items:center;gap:6px">
             <button class="act-btn act-btn-tick ${activeEvents.has(eKey)?'active':''}" id="tick-${idx}"
-              data-tip="Continue Event" onclick="markActive(${idx})" aria-label="Continue Event">
+              data-tip="Continue Event" onclick="markActive(${idx})" aria-label="Continue Event" title="Mark as Active">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </button>
-            <button class="act-btn act-btn-cross" data-tip="Remove Event" onclick="removeEvent(${idx})" aria-label="Remove Event">
+            <button class="act-btn" style="background:rgba(108,99,255,.2);color:#a5b4fc;border:1px solid rgba(108,99,255,.4)"
+              onclick="openCombinedModal(${idx})" title="Edit / Alter Event" aria-label="Edit Event">
+              ✏
+            </button>
+            <button class="act-btn act-btn-cross" data-tip="Delete Event" onclick="deleteEventBackend(${idx})" aria-label="Delete Event" title="Delete Event">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
@@ -965,55 +969,133 @@
     list.appendChild(div);
   };
 
-  window.handleCombinedFormSubmit = function(e) {
+  let editingEventId = null;
+
+  window.openCombinedModal = function(editIdx = null) {
+    document.getElementById('combinedForm').reset();
+    document.getElementById('tmMembersList').innerHTML = '';
+    
+    if (editIdx !== null && allEvents[editIdx]) {
+      const e = allEvents[editIdx];
+      editingEventId = e.id || _eventKey(e);
+      document.getElementById('evName').value = e.title || '';
+      document.getElementById('evOrg').value  = e.organizer || '';
+      document.getElementById('evDate').value = (e.date && e.date !== 'TBD') ? e.date : new Date().toISOString().split('T')[0];
+      document.getElementById('evMode').value = e.mode || 'Online';
+      document.getElementById('evLoc').value  = e.location || '';
+      document.getElementById('evLink').value = e.registration_link || e.url || '';
+      document.getElementById('tmName').value = "Team Alias";
+      document.getElementById('tmLead').value = "Lead Name";
+      document.querySelector('#combinedModal .modal-title').textContent = "✏ Edit Event";
+    } else {
+      editingEventId = null;
+      document.getElementById('evDate').value = new Date().toISOString().split('T')[0];
+      document.querySelector('#combinedModal .modal-title').textContent = "Create Event & Team";
+    }
+    combinedModal.classList.add('open');
+  };
+
+  window.closeCombinedModal = function() {
+    editingEventId = null;
+    combinedModal.classList.remove('open');
+  };
+
+  window.addTeamMemberInput = function() {
+    const list = document.getElementById('tmMembersList');
+    const div = document.createElement('div');
+    div.style.display = 'flex';
+    div.style.gap = '8px';
+    div.style.marginBottom = '6px';
+    div.innerHTML = `
+      <input type="text" class="form-input tm-member-input" placeholder="Member Name" style="padding:6px 10px">
+      <button type="button" class="act-btn act-btn-cross" style="width:auto;padding:0 10px;font-size:12px;border-radius:6px" onclick="this.parentElement.remove()" title="Remove member">✕</button>
+    `;
+    list.appendChild(div);
+  };
+
+  window.handleCombinedFormSubmit = async function(e) {
     e.preventDefault();
     const title = document.getElementById('evName').value.trim();
-    const tName = document.getElementById('tmName').value.trim();
-    const tLead = document.getElementById('tmLead').value.trim();
-    if(!title || !tName || !tLead) return;
+    if (!title) return;
 
-    const newEvent = {
+    const eventPayload = {
       title: title,
       organizer: document.getElementById('evOrg').value.trim() || "Manual",
       event_type: "Custom",
       mode: document.getElementById('evMode').value,
-      location: document.getElementById('evLoc').value.trim() || "TBD",
+      location: document.getElementById('evLoc').value.trim() || "Online",
       date: document.getElementById('evDate').value || new Date().toISOString().split('T')[0],
+      registration_link: document.getElementById('evLink').value.trim() || "#",
       url: document.getElementById('evLink').value.trim() || "#",
       price: 0,
-      urgency: "upcoming",
-      source: "Manual"
+      description: "Custom user event"
     };
-    allEvents.unshift(newEvent);
 
-    const memInputs = document.querySelectorAll('.tm-member-input');
-    const members = [];
-    memInputs.forEach(inp => {
-      const v = inp.value.trim();
-      if(v) members.push(v);
-    });
+    try {
+      if (editingEventId) {
+        // Edit existing event
+        const res = await fetch(`/api/events/${encodeURIComponent(editingEventId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(eventPayload)
+        });
+        const data = await res.json();
+        showToast(data.message || '✓ Event updated successfully!', true);
+      } else {
+        // Create new event
+        const res = await fetch('/api/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(eventPayload)
+        });
+        const data = await res.json();
+        showToast(data.message || '✓ Event created successfully!', true);
 
-    const status = document.getElementById('tmStatus').value;
+        // Also create team if team info provided
+        const tName = document.getElementById('tmName').value.trim();
+        const tLead = document.getElementById('tmLead').value.trim();
+        if (tName && tLead && tName !== "Team Alias") {
+          const memInputs = document.querySelectorAll('.tm-member-input');
+          const members = [];
+          memInputs.forEach(inp => { if (inp.value.trim()) members.push(inp.value.trim()); });
+          const status = document.getElementById('tmStatus').value;
+          await fetch('/api/teams', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ team: tName, lead: tLead, members, participating: (status === 'Participating') })
+          });
+        }
+      }
+    } catch (err) {
+      showToast('❌ Failed to save: ' + err.message, false);
+    }
 
-    mdTeams.push({
-      id: Date.now(),
-      team: tName,
-      lead: tLead,
-      members: members,
-      participating: (status === 'Participating')
-    });
-    
     closeCombinedModal();
-    applyFilters();
-    mdRenderGrid();
-    showToast('Event and Team added successfully!');
+    fetchEvents();
+  };
+
+  window.deleteEventBackend = async function(idx) {
+    const visible = _getVisible();
+    const e = visible[idx] || allEvents[idx];
+    if (!e) return;
+    if (!confirm(`Are you sure you want to delete "${e.title}"?`)) return;
+
+    const eid = e.id || _eventKey(e);
+    try {
+      const res = await fetch(`/api/events/${encodeURIComponent(eid)}`, { method: 'DELETE' });
+      const data = await res.json();
+      showToast(data.message || '🗑 Event deleted permanently', true);
+    } catch (err) {
+      showToast('❌ Delete failed: ' + err.message, false);
+    }
+    fetchEvents();
   };
 
   window.addEventListener('click', e => {
-    if(e.target === combinedModal) closeCombinedModal();
+    if (e.target === combinedModal) closeCombinedModal();
   });
   window.addEventListener('keydown', e => {
-    if(e.key === 'Escape' && combinedModal && combinedModal.classList.contains('open')) {
+    if (e.key === 'Escape' && combinedModal && combinedModal.classList.contains('open')) {
       closeCombinedModal();
     }
   });

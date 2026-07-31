@@ -21,7 +21,11 @@ if resp.status_code == 200:
         print(f"Type of data: {type(data)}")
         if isinstance(data, dict):
             print(f"Keys: {list(data.keys())}")
-            if "results" in data:
+            if "result" in data:
+                print(f"Number of results: {len(data['result'])}")
+                if data["result"]:
+                    print(f"Sample item keys: {list(data['result'][0].keys())}")
+            elif "results" in data:
                 print(f"Number of results: {len(data['results'])}")
                 if data["results"]:
                     print(f"Sample item keys: {list(data['results'][0].keys())}")

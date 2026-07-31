@@ -148,7 +148,11 @@ def _passes_filter(e: dict) -> bool:
         return False
 
     # RULE 3 — Date: must be today or in the future (past events excluded)
-    if _is_past(e.get("date", "TBD")):
+    end_date = e.get("end_date")
+    if end_date and end_date not in ("TBD", "unknown", ""):
+        if _is_past(end_date):
+            return False
+    elif _is_past(e.get("date", "TBD")):
         return False
 
     return True
@@ -254,17 +258,74 @@ def _refresh_events() -> list[dict]:
     return enriched
 
 
+CUSTOM_EVENTS_FILE  = DATA_DIR / "custom_events.json"
+DELETED_EVENTS_FILE = DATA_DIR / "deleted_events.json"
+EDITED_EVENTS_FILE  = DATA_DIR / "edited_events.json"
+TEAMS_FILE          = DATA_DIR / "teams.json"
+
+DEFAULT_TEAMS = [
+    {"id": 1, "team": "s0ul s0c13ty", "lead": "Jesvin Bruce. J", "members": ["Jesvin Bruce. J", "Harish. M", "Dharshini .T .R", "Jashwanth .M .U"], "participating": True},
+    {"id": 2, "team": "Cyber Knightz", "lead": "Harish. M", "members": ["Harish. M", "Jesvin Bruce. J"], "participating": True},
+    {"id": 3, "team": "Byte Force", "lead": "Dharshini .T .R", "members": ["Dharshini .T .R", "Jashwanth .M .U"], "participating": False},
+    {"id": 4, "team": "NullPointer", "lead": "Jashwanth .M .U", "members": ["Jashwanth .M .U", "Harish. M"], "participating": False},
+    {"id": 5, "team": "Apex Predators", "lead": "Jesvin Bruce. J", "members": ["Jesvin Bruce. J", "Dharshini .T .R"], "participating": False},
+]
+
+
+def _event_id(e: dict) -> str:
+    if e.get("id"):
+        return str(e["id"])
+    url = e.get("url") or e.get("registration_link") or ""
+    title = (e.get("title") or "").strip().lower()
+    date = e.get("date", "TBD")
+    return f"{title}|{date}|{url}"
+
+
+def _load_json(path: Path, default):
+    if path.exists():
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return default
+
+
+def _save_json(path: Path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
 def _load_events() -> list[dict]:
     cache_file = DATA_DIR / "events.json"
+    scraped: list[dict] = []
     if cache_file.exists():
         try:
             age_s = datetime.utcnow().timestamp() - cache_file.stat().st_mtime
             if age_s < 3600:
                 with open(cache_file, encoding="utf-8") as f:
-                    return json.load(f)
+                    scraped = json.load(f)
         except Exception:
             pass
-    return _refresh_events()
+    if not scraped:
+        scraped = _refresh_events()
+
+    custom_events = _load_json(CUSTOM_EVENTS_FILE, [])
+    deleted_ids   = set(_load_json(DELETED_EVENTS_FILE, []))
+    edited_map    = _load_json(EDITED_EVENTS_FILE, {})
+
+    combined = list(scraped) + list(custom_events)
+    out: list[dict] = []
+    for e in combined:
+        eid = _event_id(e)
+        e["id"] = eid
+        if eid in deleted_ids:
+            continue
+        if eid in edited_map:
+            e.update(edited_map[eid])
+        out.append(e)
+
+    return _enrich(_deduplicate(out))
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +421,161 @@ def api_events():
         })
     except Exception as exc:
         logger.error("api_events error: %s", exc, exc_info=True)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+@app.route("/api/events", methods=["POST"])
+def api_add_event():
+    try:
+        body = request.get_json(force=True) or {}
+        title = (body.get("title") or "").strip()
+        if not title:
+            return jsonify({"success": False, "error": "Title is required"}), 400
+
+        eid = f"custom_{int(datetime.utcnow().timestamp()*1000)}"
+        raw_event = {
+            "id": eid,
+            "title": title,
+            "event_type": body.get("event_type", "Hackathon"),
+            "organizer": body.get("organizer", "Custom"),
+            "price": int(body.get("price", 0)),
+            "mode": body.get("mode", "Online"),
+            "online": body.get("mode", "Online").lower() == "online",
+            "location": body.get("location", "Online"),
+            "date": body.get("date", "TBD"),
+            "end_date": body.get("end_date", ""),
+            "registration_link": body.get("registration_link") or body.get("url") or "",
+            "url": body.get("url") or body.get("registration_link") or "",
+            "description": body.get("description", ""),
+            "source": body.get("source", "User Created"),
+        }
+        event = _normalise(raw_event)
+
+        custom = _load_json(CUSTOM_EVENTS_FILE, [])
+        custom.append(event)
+        _save_json(CUSTOM_EVENTS_FILE, custom)
+        return jsonify({"success": True, "event": event, "message": "Event added successfully!"})
+    except Exception as exc:
+        logger.error("api_add_event error: %s", exc, exc_info=True)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+@app.route("/api/events/<path:event_id>", methods=["PUT"])
+def api_edit_event(event_id: str):
+    try:
+        body = request.get_json(force=True) or {}
+        edited_map = _load_json(EDITED_EVENTS_FILE, {})
+        existing = edited_map.get(event_id, {})
+        existing.update(body)
+        existing["id"] = event_id
+        if "mode" in body:
+            existing["online"] = (body["mode"].lower() == "online")
+            existing["mode"]   = "Online" if existing["online"] else "Offline"
+        edited_map[event_id] = existing
+        _save_json(EDITED_EVENTS_FILE, edited_map)
+        return jsonify({"success": True, "event": existing, "message": "Event updated successfully!"})
+    except Exception as exc:
+        logger.error("api_edit_event error: %s", exc, exc_info=True)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+@app.route("/api/events/<path:event_id>", methods=["DELETE"])
+def api_delete_event(event_id: str):
+    try:
+        deleted = set(_load_json(DELETED_EVENTS_FILE, []))
+        deleted.add(event_id)
+        _save_json(DELETED_EVENTS_FILE, list(deleted))
+
+        custom = _load_json(CUSTOM_EVENTS_FILE, [])
+        custom = [e for e in custom if _event_id(e) != event_id and str(e.get("id")) != event_id]
+        _save_json(CUSTOM_EVENTS_FILE, custom)
+
+        return jsonify({"success": True, "message": "Event deleted successfully!"})
+    except Exception as exc:
+        logger.error("api_delete_event error: %s", exc, exc_info=True)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+# ── Teams CRUD ────────────────────────────────────────────────────────────────
+
+@app.route("/api/teams", methods=["GET"])
+def api_get_teams():
+    try:
+        teams = _load_json(TEAMS_FILE, None)
+        if teams is None:
+            teams = DEFAULT_TEAMS
+            _save_json(TEAMS_FILE, teams)
+        return jsonify({"success": True, "teams": teams})
+    except Exception as exc:
+        logger.error("api_get_teams error: %s", exc, exc_info=True)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+@app.route("/api/teams", methods=["POST"])
+def api_add_team():
+    try:
+        body = request.get_json(force=True) or {}
+        team_name = (body.get("team") or "").strip()
+        if not team_name:
+            return jsonify({"success": False, "error": "Team name is required"}), 400
+
+        teams = _load_json(TEAMS_FILE, DEFAULT_TEAMS)
+        next_id = max([t.get("id", 0) for t in teams], default=0) + 1
+        new_team = {
+            "id": next_id,
+            "team": team_name,
+            "lead": (body.get("lead") or "Team Lead").strip(),
+            "members": body.get("members") or [],
+            "participating": bool(body.get("participating", False)),
+        }
+        teams.append(new_team)
+        _save_json(TEAMS_FILE, teams)
+        return jsonify({"success": True, "team": new_team, "teams": teams, "message": "Team added successfully!"})
+    except Exception as exc:
+        logger.error("api_add_team error: %s", exc, exc_info=True)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+@app.route("/api/teams/<int:team_id>", methods=["PUT"])
+def api_update_team(team_id: int):
+    try:
+        body = request.get_json(force=True) or {}
+        teams = _load_json(TEAMS_FILE, DEFAULT_TEAMS)
+        found = False
+        updated_team = None
+        for t in teams:
+            if t.get("id") == team_id:
+                if "team" in body:
+                    t["team"] = body["team"].strip()
+                if "lead" in body:
+                    t["lead"] = body["lead"].strip()
+                if "members" in body:
+                    t["members"] = body["members"]
+                if "participating" in body:
+                    t["participating"] = bool(body["participating"])
+                found = True
+                updated_team = t
+                break
+
+        if not found:
+            return jsonify({"success": False, "error": f"Team ID {team_id} not found"}), 404
+
+        _save_json(TEAMS_FILE, teams)
+        return jsonify({"success": True, "team": updated_team, "teams": teams, "message": "Team updated!"})
+    except Exception as exc:
+        logger.error("api_update_team error: %s", exc, exc_info=True)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
+@app.route("/api/teams/<int:team_id>", methods=["DELETE"])
+def api_delete_team(team_id: int):
+    try:
+        teams = _load_json(TEAMS_FILE, DEFAULT_TEAMS)
+        filtered_teams = [t for t in teams if t.get("id") != team_id]
+        _save_json(TEAMS_FILE, filtered_teams)
+        return jsonify({"success": True, "teams": filtered_teams, "message": "Team deleted!"})
+    except Exception as exc:
+        logger.error("api_delete_team error: %s", exc, exc_info=True)
         return jsonify({"success": False, "error": str(exc)}), 500
 
 

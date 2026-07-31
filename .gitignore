@@ -6,3 +6,6 @@ __pycache__/
 .venv/
 dist/
 build/
+*.log
+hec.txt
+next_f_extracted.txt

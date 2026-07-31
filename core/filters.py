@@ -40,12 +40,25 @@ def is_relevant_location(event: dict) -> bool:
 
 def is_future(event: dict) -> bool:
     date_str = event.get("date", "TBD")
+    end_date_str = event.get("end_date", "")
     if date_str in ("TBD", "", "unknown"):
         return True
+
+    today_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    # If an end date is provided, event is considered future/active if end_date >= today
+    if end_date_str and end_date_str not in ("TBD", "", "unknown"):
+        try:
+            end_d = datetime.strptime(end_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            return end_d >= today_start
+        except ValueError:
+            pass
+
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=1)
         d = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        return d >= cutoff
+        return d >= today_start
     except ValueError:
         return True
 

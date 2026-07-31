@@ -54,14 +54,14 @@ def get_devfolio_events() -> list[dict]:
     events: list[dict] = []
     seen: set[str] = set()
 
-    for api_url in API_URLS:
-        resp = safe_get(api_url, timeout=25)
+    for api_url in API_URLS[:1]:   # First page returns 1000 items
+        resp = safe_get(api_url, timeout=8)
         if not resp:
             throttle(1.0)
             continue
         try:
             data = resp.json()
-            items = data if isinstance(data, list) else data.get("results", data.get("hackathons", []))
+            items = data if isinstance(data, list) else (data.get("result") or data.get("results") or data.get("hackathons") or [])
             for h in items:
                 parsed = _parse_item(h)
                 if parsed and parsed["url"] not in seen:

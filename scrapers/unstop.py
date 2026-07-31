@@ -7,7 +7,7 @@ BASE = "https://unstop.com"
 
 # Unstop search API — free, online+india
 API_PAGES = [
-    f"{BASE}/api/public/opportunity/search-result?opportunity=hackathon&filters[0][type]=location&filters[0][value]=online&per_page=30&page={p}"
+    f"{BASE}/api/public/opportunity/search-result?opportunity=hackathons&filters[0][type]=location&filters[0][value]=online&per_page=30&page={p}"
     for p in range(1, 4)
 ]
 
@@ -64,7 +64,7 @@ def get_unstop_events() -> list[dict]:
     seen: set[str] = set()
 
     for api_url in API_PAGES:
-        resp = safe_get(api_url, timeout=25)
+        resp = safe_get(api_url, timeout=8)
         if not resp:
             throttle(1.0)
             continue
