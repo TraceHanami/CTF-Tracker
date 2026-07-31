@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  ctf-tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ctf_tracker
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - EMAIL_ADDRESS=${EMAIL_ADDRESS:-}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD:-}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

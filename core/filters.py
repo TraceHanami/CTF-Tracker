@@ -10,6 +10,8 @@ TN_KEYWORDS = [
     "cuddalore", "nagapattinam", "pondicherry", "puducherry",
     "anna university", "iit madras", "nit trichy", "vit vellore",
     "srm", "srmist", "sastra", "amrita", "psg", "ceg",
+    "kerala", "kochi", "trivandrum", "thrissur", "calicut",
+    "bengaluru", "bangalore", "karnataka",
 ]
 
 ONLINE_KEYWORDS = [
