@@ -1,5 +1,6 @@
 .env
-data/
+data/*
+!data/events.json
 __pycache__/
 *.pyc
 *.egg-info/

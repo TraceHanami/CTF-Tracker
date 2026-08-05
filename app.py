@@ -29,7 +29,12 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
-app = Flask(__name__, template_folder="templates", static_folder="static")
+BASE_DIR = Path(__file__).resolve().parent
+app = Flask(
+    __name__,
+    template_folder=str(BASE_DIR / "templates"),
+    static_folder=str(BASE_DIR / "static"),
+)
 CORS(app)
 
 logging.basicConfig(
@@ -38,8 +43,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ctf_tracker")
 
-DATA_DIR = Path("data")
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR = Path(os.environ.get("DATA_DIR", "/tmp/data" if os.environ.get("VERCEL") else BASE_DIR / "data"))
+try:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    DATA_DIR = Path("/tmp/data")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -292,12 +301,17 @@ def _load_json(path: Path, default):
 
 
 def _save_json(path: Path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        logger.warning("Could not save JSON to %s: %s", path, exc)
 
 
 def _load_events() -> list[dict]:
     cache_file = DATA_DIR / "events.json"
+    fallback_file = BASE_DIR / "data" / "events.json"
     scraped: list[dict] = []
     if cache_file.exists():
         try:
@@ -305,6 +319,12 @@ def _load_events() -> list[dict]:
             if age_s < 3600:
                 with open(cache_file, encoding="utf-8") as f:
                     scraped = json.load(f)
+        except Exception:
+            pass
+    if not scraped and fallback_file.exists():
+        try:
+            with open(fallback_file, encoding="utf-8") as f:
+                scraped = json.load(f)
         except Exception:
             pass
     if not scraped:

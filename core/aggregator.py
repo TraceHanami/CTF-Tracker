@@ -10,7 +10,16 @@ from core.utils import get_logger
 
 logger = get_logger("aggregator")
 
-DATA_DIR = Path("data")
+import os
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = Path(os.environ.get("DATA_DIR", "/tmp/data" if os.environ.get("VERCEL") else BASE_DIR / "data"))
+try:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    DATA_DIR = Path("/tmp/data")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 EVENTS_FILE = DATA_DIR / "events.json"
 
 

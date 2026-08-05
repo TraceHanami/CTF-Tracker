@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-SEEN_FILE = Path("data/seen.json")
+import os
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = Path(os.environ.get("DATA_DIR", "/tmp/data" if os.environ.get("VERCEL") else BASE_DIR / "data"))
+SEEN_FILE = DATA_DIR / "seen.json"
 
 
 def _load() -> set[str]:
@@ -16,8 +20,11 @@ def _load() -> set[str]:
 
 
 def _save(seen: set[str]) -> None:
-    SEEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SEEN_FILE.write_text(json.dumps(sorted(seen), indent=2))
+    try:
+        SEEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SEEN_FILE.write_text(json.dumps(sorted(seen), indent=2))
+    except Exception:
+        pass
 
 
 def filter_new(events: list[dict]) -> list[dict]:
